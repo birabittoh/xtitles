@@ -1,0 +1,377 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Xbox 360 Title Browser API",
+    "description": "API for browsing Xbox 360 titles and their gamerpics",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8081/api/v1",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/titles": {
+      "get": {
+        "summary": "Get paginated list of titles",
+        "description": "Retrieve a paginated list of Xbox 360 titles with their associated pictures",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (starts from 1)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of items per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "only_with_pictures",
+            "in": "query",
+            "description": "Filter to only return titles that have pictures",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "reverse",
+            "in": "query",
+            "description": "Return results in reverse order (by title_id)",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedTitlesResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search titles by name",
+        "description": "Perform a fuzzy search on title names",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search query string",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (starts from 1)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of items per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "only_with_pictures",
+            "in": "query",
+            "description": "Filter to only search titles that have pictures",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedTitlesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/titles/{id}": {
+      "get": {
+        "summary": "Get a specific title by ID",
+        "description": "Retrieve a single Xbox 360 title with its pictures",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Title ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Title"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Title not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/titles/{id}/{picture}": {
+      "get": {
+        "summary": "Get a picture file for a title",
+        "description": "Download a specific picture file for a title",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Title ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "picture",
+            "in": "path",
+            "description": "Picture filename (with or without extension)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Picture file",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Title or picture not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Title": {
+        "type": "object",
+        "properties": {
+          "title_id": {
+            "type": "string",
+            "description": "Unique identifier for the title"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the title"
+          },
+          "systems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of systems the title is available on"
+          },
+          "bing_id": {
+            "type": "string",
+            "description": "Bing identifier"
+          },
+          "service_config_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Service configuration identifier"
+          },
+          "pfn": {
+            "type": "string",
+            "nullable": true,
+            "description": "Package Family Name"
+          },
+          "pictures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Picture"
+            },
+            "description": "List of pictures associated with this title"
+          }
+        },
+        "required": ["title_id", "name", "systems", "bing_id", "pictures"]
+      },
+      "Picture": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique identifier for the picture"
+          },
+          "title_id": {
+            "type": "string",
+            "description": "Title ID this picture belongs to"
+          },
+          "name": {
+            "type": "string",
+            "description": "Picture filename without extension"
+          }
+        },
+        "required": ["id", "title_id", "name"]
+      },
+      "PaginatedTitlesResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Title"
+            },
+            "description": "Array of titles for the current page"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of items across all pages"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of items per page"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of items skipped"
+          },
+          "page": {
+            "type": "integer",
+            "description": "Current page number"
+          },
+          "pages": {
+            "type": "integer",
+            "description": "Total number of pages"
+          }
+        },
+        "required": ["items", "total", "limit", "offset", "page", "pages"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message"
+          }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}
