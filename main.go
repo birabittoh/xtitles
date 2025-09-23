@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -26,6 +27,7 @@ type Config struct {
 	PicturesFolder string
 	PicturesSuffix string
 	Address        string
+	Environment    string
 	DBFile         string
 }
 
@@ -74,6 +76,7 @@ func loadConfig() {
 		PicturesFolder: getEnv("PICTURES_FOLDER", "titles"),
 		PicturesSuffix: getEnv("PICTURES_SUFFIX", ".png"),
 		Address:        getEnv("ADDRESS", "8081"),
+		Environment:    getEnv("ENVIRONMENT", "development"),
 		DBFile:         getEnv("DB_FILE", "titles.db"),
 	}
 }
@@ -220,7 +223,11 @@ func readPictureDirs() (map[string][]string, error) {
 	return dirPngs, err
 }
 
-func setupRoutes() *gin.Engine {
+func setupRoutes(production bool) *gin.Engine {
+	if production {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.Default()
 
 	// Serve static files (frontend)
@@ -398,9 +405,22 @@ func getTitlePicture(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid title ID"})
 		return
 	}
-
 	if len(picture) == 0 || len(picture) > 10 || strings.ContainsAny(picture, `/\`) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid picture name"})
+		return
+	}
+
+	// Set cache headers for maximum caching
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Header("Expires", time.Now().AddDate(1, 0, 0).Format(http.TimeFormat))
+
+	// Set ETag based on file path for better cache validation
+	etag := fmt.Sprintf(`"%s-%s"`, id, picture)
+	c.Header("ETag", etag)
+
+	// Check if client has cached version
+	if match := c.GetHeader("If-None-Match"); match == etag {
+		c.Status(http.StatusNotModified)
 		return
 	}
 
@@ -422,7 +442,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	r := setupRoutes()
+	r := setupRoutes(config.Environment == "production")
 
 	fmt.Printf("Server starting on %s\n", config.Address)
 	fmt.Printf("Frontend available at: http://localhost%s\n", config.Address)
