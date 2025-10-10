@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,12 +54,18 @@ type Picture struct {
 }
 
 type PaginatedResponse struct {
-	Items  interface{} `json:"items"`
-	Total  int64       `json:"total"`
-	Limit  int         `json:"limit"`
-	Offset int         `json:"offset"`
-	Page   int         `json:"page"`
-	Pages  int         `json:"pages"`
+	Items  any   `json:"items"`
+	Total  int64 `json:"total"`
+	Limit  int   `json:"limit"`
+	Offset int   `json:"offset"`
+	Page   int   `json:"page"`
+	Pages  int   `json:"pages"`
+}
+
+type ExportedTitle struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Pictures []string `json:"pictures"`
 }
 
 var db *gorm.DB
@@ -75,7 +82,7 @@ func loadConfig() {
 		DataDir:        getEnv("DATA_DIR", "data"),
 		PicturesFolder: getEnv("PICTURES_FOLDER", "titles"),
 		PicturesSuffix: getEnv("PICTURES_SUFFIX", ".png"),
-		Address:        getEnv("ADDRESS", "8081"),
+		Address:        getEnv("ADDRESS", ":8081"),
 		Environment:    getEnv("ENVIRONMENT", "development"),
 		DBFile:         getEnv("DB_FILE", "titles.db"),
 	}
@@ -142,7 +149,7 @@ func fetchAllTitles() ([]Title, error) {
 
 		allTitles = append(allTitles, r.Items...)
 
-		fmt.Printf("Fetched %d titles (total: %d)\n", len(r.Items), len(allTitles))
+		log.Printf("Fetched %d titles (total: %d)\n", len(r.Items), len(allTitles))
 
 		if len(r.Items) < config.Limit {
 			break
@@ -158,11 +165,11 @@ func loadTitlesToDB() error {
 	var count int64
 	db.Model(&Title{}).Count(&count)
 	if count > 0 {
-		fmt.Printf("Database already contains %d titles\n", count)
+		log.Printf("Database already contains %d titles\n", count)
 		return nil
 	}
 
-	fmt.Println("Fetching titles from API...")
+	log.Println("Fetching titles from API...")
 	titles, err := fetchAllTitles()
 	if err != nil {
 		return fmt.Errorf("fetching titles failed: %w", err)
@@ -171,12 +178,12 @@ func loadTitlesToDB() error {
 	// Process pictures from filesystem
 	dirPngs, err := readPictureDirs()
 	if err != nil {
-		fmt.Printf("Warning: Error reading picture dirs: %v\n", err)
+		log.Printf("Warning: Error reading picture dirs: %v\n", err)
 		dirPngs = make(map[string][]string)
 	}
 
 	// Insert titles into database
-	fmt.Println("Inserting titles into database...")
+	log.Println("Inserting titles into database...")
 	if err := db.CreateInBatches(titles, 100).Error; err != nil {
 		return fmt.Errorf("inserting titles failed: %w", err)
 	}
@@ -194,13 +201,13 @@ func loadTitlesToDB() error {
 	}
 
 	if len(allPictures) > 0 {
-		fmt.Println("Inserting pictures into database...")
+		log.Println("Inserting pictures into database...")
 		if err := db.CreateInBatches(allPictures, 100).Error; err != nil {
 			return fmt.Errorf("inserting pictures failed: %w", err)
 		}
 	}
 
-	fmt.Printf("Successfully loaded %d titles and %d pictures into database\n", len(titles), len(allPictures))
+	log.Printf("Successfully loaded %d titles and %d pictures into database\n", len(titles), len(allPictures))
 	return nil
 }
 
@@ -429,27 +436,106 @@ func getTitlePicture(c *gin.Context) {
 	c.File(picturePath)
 }
 
+func createJSON(titles any, filename string, indent string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("error creating file: %w", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if indent != "" {
+		encoder.SetIndent("", indent)
+	}
+	if err := encoder.Encode(titles); err != nil {
+		return fmt.Errorf("error encoding JSON: %w", err)
+	}
+
+	return nil
+}
+
+func exportToJSON() {
+	var titles []Title
+	err := db.Model(&Title{}).Group("titles.title_id").Order("titles.title_id ASC").Preload("Pictures").Find(&titles).Error
+	if err != nil {
+		log.Printf("Error exporting to JSON: %v\n", err)
+		return
+	}
+
+	var toBeExported []ExportedTitle
+	for i := range titles {
+		var pics []string
+		for _, pic := range titles[i].Pictures {
+			pics = append(pics, pic.Name)
+		}
+		toBeExported = append(toBeExported, ExportedTitle{
+			ID:       titles[i].TitleID,
+			Name:     titles[i].Name,
+			Pictures: pics,
+		})
+	}
+
+	if err := createJSON(titles, "titles.full.json", "  "); err != nil {
+		log.Printf("Error creating titles.full.json: %v\n", err)
+		return
+	}
+
+	if err := createJSON(titles, "titles.full.min.json", ""); err != nil {
+		log.Printf("Error creating titles.full.min.json: %v\n", err)
+		return
+	}
+
+	if err := createJSON(toBeExported, "titles.json", "  "); err != nil {
+		log.Printf("Error creating titles.json: %v\n", err)
+		return
+	}
+
+	if err := createJSON(toBeExported, "titles.min.json", ""); err != nil {
+		log.Printf("Error creating titles.min.json: %v\n", err)
+		return
+	}
+
+	var filtered []ExportedTitle
+	for _, t := range toBeExported {
+		if len(t.Pictures) > 0 {
+			filtered = append(filtered, t)
+		}
+	}
+
+	if err := createJSON(filtered, "titles.filtered.json", "  "); err != nil {
+		log.Printf("Error creating titles.filtered.json: %v\n", err)
+		return
+	}
+
+	if err := createJSON(filtered, "titles.filtered.min.json", ""); err != nil {
+		log.Printf("Error creating titles.filtered.min.json: %v\n", err)
+		return
+	}
+}
+
 func main() {
 	loadConfig()
 
 	if err := initDB(); err != nil {
-		fmt.Printf("Error initializing database: %v\n", err)
+		log.Printf("Error initializing database: %v\n", err)
 		os.Exit(1)
 	}
 
 	if err := loadTitlesToDB(); err != nil {
-		fmt.Printf("Error loading data: %v\n", err)
+		log.Printf("Error loading data: %v\n", err)
 		os.Exit(1)
 	}
 
+	exportToJSON()
+
 	r := setupRoutes(config.Environment == "production")
 
-	fmt.Printf("Server starting on %s\n", config.Address)
-	fmt.Printf("Frontend available at: http://localhost%s\n", config.Address)
-	fmt.Printf("API available at: http://localhost%s/api/v1\n", config.Address)
+	log.Printf("Server starting on %s\n", config.Address)
+	log.Printf("Frontend available at: http://localhost%s\n", config.Address)
+	log.Printf("API available at: http://localhost%s/api/v1\n", config.Address)
 
 	if err := r.Run(config.Address); err != nil {
-		fmt.Printf("Server failed to start: %v\n", err)
+		log.Printf("Server failed to start: %v\n", err)
 		os.Exit(1)
 	}
 }
