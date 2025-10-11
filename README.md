@@ -3,6 +3,8 @@ A database of known Xbox 360 gamerpics in PNG format.
 
 Credits to [xboxgamer.pics](https://xboxgamer.pics/).
 
+You can browse and search all pictures in [this example frontend](https://birabittoh.github.io/xtitles).
+
 ## Titles
 
 This repository provides (and generates) the following files and their minified versions:
